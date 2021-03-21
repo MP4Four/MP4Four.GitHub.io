@@ -4,6 +4,7 @@ title:  "对于nc反弹shell的一些疑惑"
 date:   2021-03-21 11:13:57 +0800
 author: MP4Four
 keywords: nc bash anonymous-tunnel
+tags: nc shell
 ---
 
 ### 一次平平无常的nc反弹shell操作如下
