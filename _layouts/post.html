@@ -13,4 +13,21 @@ layout: default
   <small>tags: <em>{{ page.tags | join: "</em> - <em>" }}</em></small>
 {% endif %}
 
+<!-- Gitalk 评论 start  -->
 <div id="gitalk-container"></div>
+    <script type="text/javascript">
+    var title = location.pathname.substr(0, 50);//截取路径的前50个字符作为标识符
+    var gitalk = new Gitalk({
+
+    // gitalk的主要参数
+        clientID: "07489f6ee6980182e980", //`这里插入你申请到的clientID `,
+        clientSecret: "57ecc19caf94d0eb72fce099f133004b79a1813e", //`这里插入你申请到的clientSecret`,
+        repo: "https://github.com/MP4Four/MP4Four.GitHub.io", //`https://github.com`,
+        owner: "MP4Four", //'就是你了',
+        admin: "MP4Four", //['你的github账户名，不是昵称'],
+        id: title,//因为这里不能超过50字符，所以做了处理，当超过50时自动截取前50
+
+    });
+    gitalk.render('gitalk-container');
+    </script>
+<!-- Gitalk end -->
